@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Smart Vocab</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & Noto Sans JP -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans JP', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+    body {
+      font-family: 'Inter', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+      letter-spacing: -0.01em;
+    }
+    /* iOS Safari等の入力フォーカス時の自動ズームを完全防止 */
+    input, select, textarea, button {
+      font-size: 16px !important;
+      -webkit-text-size-adjust: 100%;
+    }
+    .card-wrap { perspective: 1200px; }
+    .card-inner {
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-style: preserve-3d;
+    }
+    .card-inner.flipped { transform: rotateY(180deg); }
+    .card-face {
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+    .card-back { transform: rotateY(180deg); }
+    .fluid-en {
+      font-size: clamp(1.75rem, 6vw, 2.75rem);
+      line-height: 1.2;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .fluid-jp {
+      font-size: clamp(1.35rem, 5vw, 2.25rem);
+      line-height: 1.35;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body class="bg-zinc-50 text-zinc-900 min-h-screen flex flex-col justify-between antialiased selection:bg-zinc-900 selection:text-white">
+
+  <!-- ヘッダー（シンプル & ミニマル） -->
+  <header class="border-b border-zinc-200/80 bg-white/90 backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-xl mx-auto px-4 h-13 py-2.5 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <span class="w-6 h-6 rounded-md bg-zinc-900 text-white flex items-center justify-center font-semibold text-xs tracking-tight">V</span>
+        <h1 class="text-sm font-semibold text-zinc-900 tracking-tight">Smart Vocab</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="headerCountBadge" class="text-[11px] font-medium px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 border border-zinc-200/60">
+          0 語
+        </span>
+        <button 
+          id="btnOpenGuide"
+          onclick="openGuideModal()" 
+          class="w-7 h-7 rounded-md border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-800 flex items-center justify-center transition text-xs font-semibold"
+          title="使い方を見る"
+          aria-label="使い方ガイド"
+        >
+          ?
+        </button>
+      </div>
+    </div>
+
+    <!-- 進捗バー（習得率インジケーター） -->
+    <div class="max-w-xl mx-auto px-4 pb-2 pt-0.5">
+      <div class="flex items-center justify-between text-[11px] mb-1 font-medium text-zinc-500">
+        <div class="flex items-center gap-3">
+          <span class="inline-flex items-center gap-1 text-zinc-700">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            習得 <strong id="dashMasteredCount" class="font-semibold text-zinc-900 ml-0.5">0</strong>
+          </span>
+          <span class="inline-flex items-center gap-1 text-zinc-700">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            学習中 <strong id="dashLearningCount" class="font-semibold text-zinc-900 ml-0.5">0</strong>
+          </span>
+          <span class="inline-flex items-center gap-1 text-zinc-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-zinc-300"></span>
+            未着手 <span id="dashUnlearnedCount" class="font-medium text-zinc-500 ml-0.5">0</span>
+          </span>
+        </div>
+        <span class="font-semibold text-zinc-700" id="dashPercent">0%</span>
+      </div>
+      <div class="w-full h-1 bg-zinc-100 rounded-full overflow-hidden flex">
+        <div id="barMastered" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%;"></div>
+        <div id="barLearning" class="bg-amber-400 h-full transition-all duration-300" style="width: 0%;"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="flex-1 max-w-xl w-full mx-auto px-4 py-4 flex flex-col gap-3.5">
+
+    <!-- セグメントコントロール式ナビゲーション -->
+    <nav class="grid grid-cols-4 gap-1 p-1 bg-zinc-200/60 rounded-xl text-xs font-medium text-zinc-500">
+      <button id="navStudy" onclick="switchTab('study')" class="py-1.5 rounded-lg bg-white text-zinc-900 shadow-xs transition-all text-center">
+        覚える
+      </button>
+      <button id="navTest" onclick="switchTab('test')" class="py-1.5 rounded-lg hover:text-zinc-900 transition-all text-center">
+        テスト
+      </button>
+      <button id="navScan" onclick="switchTab('scan')" class="py-1.5 rounded-lg hover:text-zinc-900 transition-all text-center">
+        写真読取
+      </button>
+      <button id="navManage" onclick="switchTab('manage')" class="py-1.5 rounded-lg hover:text-zinc-900 transition-all text-center">
+        管理
+      </button>
+    </nav>
+
+    <!-- ==================== 1. 覚える（フラッシュカード） ==================== -->
+    <section id="paneStudy" class="flex-1 flex flex-col gap-3">
+      <!-- 出題方向 & フィルタバー -->
+      <div class="flex items-center justify-between gap-2">
+        <div class="inline-flex p-0.5 bg-zinc-200/60 rounded-lg text-[11px] font-medium text-zinc-600">
+          <button id="studyDirEnJp" onclick="setStudyDirection('en-ja')" class="px-2.5 py-1 rounded-md bg-white text-zinc-900 shadow-xs transition">
+            英 ➔ 日
+          </button>
+          <button id="studyDirJpEn" onclick="setStudyDirection('ja-en')" class="px-2.5 py-1 rounded-md text-zinc-500 hover:text-zinc-900 transition">
+            日 ➔ 英
+          </button>
+        </div>
+
+        <div id="studyCounter" class="text-[11px] text-zinc-400 font-medium">0 / 0</div>
+      </div>
+
+      <!-- 空状態（0件） -->
+      <div id="studyEmptyState" class="hidden bg-white border border-zinc-200/80 rounded-2xl p-8 min-h-[340px] flex flex-col items-center justify-center text-center shadow-xs">
+        <div class="w-12 h-12 rounded-xl bg-zinc-100 text-zinc-400 flex items-center justify-center mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+        </div>
+        <h3 class="text-sm font-semibold text-zinc-900 mb-1">単語がまだ登録されていません</h3>
+        <p class="text-xs text-zinc-500 max-w-xs leading-relaxed mb-4">
+          参考書や単語帳の写真をアルバムから選択して、単語を読み取ってみましょう。
+        </p>
+        <button onclick="switchTab('scan')" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-medium transition shadow-xs">
+          写真から単語を取り込む
+        </button>
+      </div>
+
+      <!-- 3Dフリップカード -->
+      <div id="studyCardContainer" class="card-wrap w-full min-h-[340px] sm:min-h-[380px] cursor-pointer" onclick="toggleStudyCardFlip()">
+        <div id="studyCardInner" class="card-inner relative w-full h-full min-h-[340px] sm:min-h-[380px] rounded-2xl border border-zinc-200/90 bg-white p-6 sm:p-7 flex flex-col justify-between text-center shadow-xs">
+          
+          <div class="w-full flex items-center justify-between text-[11px]">
+            <span id="studyDirectionLabel" class="font-medium text-zinc-400">ENGLISH</span>
+            <div class="flex items-center gap-2">
+              <span id="studyCardStatusBadge" class="px-2 py-0.5 rounded-md font-medium text-[10px] bg-zinc-100 text-zinc-600">未着手</span>
+              <button 
+                type="button" 
+                onclick="event.stopPropagation(); playCurrentAudio();" 
+                class="p-1 rounded-md text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition"
+                title="発音再生"
+              >
+                🔊
+              </button>
+            </div>
+          </div>
+          
+          <div class="my-auto py-4 w-full flex flex-col items-center justify-center">
+            <h2 id="studyCardMainText" class="fluid-en font-semibold text-zinc-900 tracking-tight max-w-full">-</h2>
+            <p id="studyCardSubText" class="fluid-jp font-semibold text-zinc-600 mt-3 hidden max-w-full">-</p>
+          </div>
+          
+          <div class="text-center text-[10px] text-zinc-400">
+            タップして答えを表示 / 戻す
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 自己評価ボタンバー -->
+      <div id="studyActionBar" class="grid grid-cols-4 gap-2 pt-0.5">
+        <button onclick="stepStudyCard(-1)" class="py-2.5 rounded-xl border border-zinc-200 bg-white text-xs font-medium text-zinc-700 hover:bg-zinc-50 transition shadow-xs">
+          前へ
+        </button>
+        <button onclick="markStudyCard('learning')" class="py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-xs font-medium text-amber-800 hover:bg-amber-100 transition shadow-xs">
+          まだ不安
+        </button>
+        <button onclick="markStudyCard('mastered')" class="py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-medium text-emerald-800 hover:bg-emerald-100 transition shadow-xs">
+          覚えた！
+        </button>
+        <button onclick="stepStudyCard(1)" class="py-2.5 rounded-xl border border-zinc-200 bg-white text-xs font-medium text-zinc-700 hover:bg-zinc-50 transition shadow-xs">
+          次へ
+        </button>
+      </div>
+    </section>
+
+    <!-- ==================== 2. テストモード ==================== -->
+    <section id="paneTest" class="hidden flex-1 flex flex-col gap-3">
+      <!-- テスト出題方向 -->
+      <div class="inline-flex p-0.5 bg-zinc-200/60 rounded-lg text-[11px] font-medium text-zinc-600 self-start">
+        <button id="testDirEnJa" onclick="setTestDirection('en-ja')" class="px-3 py-1 rounded-md bg-white text-zinc-900 shadow-xs transition">
+          英 ➔ 日 (大意判定)
+        </button>
+        <button id="testDirJaEn" onclick="setTestDirection('ja-en')" class="px-3 py-1 rounded-md text-zinc-500 hover:text-zinc-900 transition">
+          日 ➔ 英 (頭文字ヒント)
+        </button>
+      </div>
+
+      <!-- 空状態 -->
+      <div id="testEmptyState" class="hidden bg-white border border-zinc-200/80 rounded-2xl p-8 min-h-[220px] flex flex-col items-center justify-center text-center shadow-xs">
+        <h3 class="text-sm font-semibold text-zinc-900 mb-1">テスト可能な単語がありません</h3>
+        <p class="text-xs text-zinc-500 max-w-xs leading-relaxed mb-4">
+          先に「写真読取」から単語を追加してください。
+        </p>
+        <button onclick="switchTab('scan')" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-medium transition shadow-xs">
+          単語を登録する
+        </button>
+      </div>
+
+      <!-- テスト問題カード -->
+      <div id="testQuestionBox" class="bg-white border border-zinc-200/90 rounded-2xl p-5 min-h-[140px] flex flex-col justify-between items-center text-center shadow-xs">
+        <div class="w-full flex items-center justify-between text-[11px]">
+          <span id="testDirectionPrompt" class="text-zinc-400 font-medium">問題</span>
+          <span id="testStatusBadge" class="px-2 py-0.5 rounded-md font-medium text-[10px] bg-zinc-100 text-zinc-600">-</span>
+        </div>
+
+        <div class="my-auto py-2 w-full">
+          <h3 id="testPromptWord" class="fluid-jp font-semibold text-zinc-900 max-w-full">-</h3>
+        </div>
+
+        <div id="testHintBox" class="hidden">
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-zinc-100 text-zinc-600 border border-zinc-200/70">
+            <span>ヒント:</span>
+            <span id="testHintChar" class="font-semibold text-zinc-900">[ ?... ]</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- 回答フォーム -->
+      <form id="testForm" onsubmit="handleTestSubmit(event)" class="flex flex-col gap-2">
+        <input 
+          type="text" 
+          id="testInput" 
+          placeholder="回答を入力..." 
+          autocomplete="off" 
+          autocorrect="off" 
+          spellcheck="false" 
+          class="w-full px-3.5 py-2.5 bg-white border border-zinc-200 rounded-xl text-base text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-900 shadow-xs transition"
+        >
+        <button 
+          type="submit" 
+          id="testSubmitBtn" 
+          class="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium rounded-xl transition shadow-xs active:scale-[0.99]"
+        >
+          回答を判定
+        </button>
+      </form>
+
+      <!-- 判定フィードバック -->
+      <div id="testFeedback" class="hidden p-4 rounded-xl border text-center transition-all flex flex-col gap-1.5 text-xs">
+        <div id="testFeedbackStatus" class="font-semibold text-sm"></div>
+        <div id="testFeedbackDetail" class="text-zinc-600"></div>
+        <div id="testFeedbackStats" class="text-[11px] text-zinc-500 font-medium"></div>
+        <div class="mt-2 flex justify-center">
+          <button onclick="nextTestQuestion()" class="px-4 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg text-xs font-medium transition shadow-xs">
+            次の問題へ ➔
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 3. 写真読取（複数選択 & 自動解析） ==================== -->
+    <section id="paneScan" class="hidden flex-1 flex flex-col gap-3.5">
+      <div class="bg-white border border-zinc-200/90 rounded-2xl p-5 shadow-xs flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-semibold text-zinc-900">単語帳の写真を読み取る</h3>
+            <p class="text-[11px] text-zinc-500 mt-0.5">参考書やノートの写真を複数枚まとめてAI解析します。</p>
+          </div>
+          <span class="text-[10px] font-medium px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 border border-zinc-200/60">
+            複数枚選択可
+          </span>
+        </div>
+
+        <!-- 選択エリア（captureなし：アルバム直結） -->
+        <div 
+          onclick="document.getElementById('photoFileInput').click()"
+          class="w-full border border-dashed border-zinc-300 hover:border-zinc-400 rounded-xl p-6 text-center bg-zinc-50/70 hover:bg-zinc-100/50 cursor-pointer transition flex flex-col items-center justify-center gap-1.5"
+        >
+          <div class="w-8 h-8 rounded-full bg-zinc-200 text-zinc-600 flex items-center justify-center mb-0.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <span class="text-xs font-medium text-zinc-800">アルバムから写真を選択</span>
+          <span class="text-[11px] text-zinc-400">タップして複数選択（カメラは強制起動しません）</span>
+          <input type="file" id="photoFileInput" accept="image/*" multiple class="hidden" onchange="handlePhotosSelected(this.files)">
+        </div>
+
+        <!-- 解析プログレス -->
+        <div id="scanProgressBox" class="hidden p-3 bg-zinc-50 border border-zinc-200/80 rounded-xl text-center text-xs flex flex-col items-center gap-2">
+          <div class="flex items-center gap-2">
+            <div class="w-3.5 h-3.5 border-2 border-zinc-800 border-t-transparent rounded-full animate-spin"></div>
+            <p class="font-medium text-zinc-800 text-xs" id="scanProgressStatus">画像を最適化中...</p>
+          </div>
+          <div class="w-full bg-zinc-200 rounded-full h-1.5 overflow-hidden max-w-xs">
+            <div id="scanProgressBar" class="bg-zinc-900 h-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <p id="scanProgressDetail" class="text-[10px] text-zinc-500">1 / 1 枚目を処理中...</p>
+        </div>
+      </div>
+
+      <!-- 抽出結果テーブル（確認・インライン編集） -->
+      <div id="stagingBox" class="hidden bg-white border border-zinc-200/90 rounded-2xl p-4 shadow-xs flex flex-col gap-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-zinc-900">
+              抽出結果 (<span id="stagingCount">0</span>件)
+            </span>
+          </div>
+          <button onclick="addEmptyStagingRow()" class="text-xs text-zinc-600 hover:text-zinc-900 font-medium transition">
+            ＋ 行追加
+          </button>
+        </div>
+        <p class="text-[11px] text-zinc-400">
+          誤認識がある場合はセルを直接タップして修正できます。
+        </p>
+
+        <div class="border border-zinc-200 rounded-xl overflow-hidden bg-white max-h-72 overflow-y-auto">
+          <div class="grid grid-cols-12 bg-zinc-50 px-3 py-1.5 text-[11px] font-medium text-zinc-500 border-b border-zinc-200 sticky top-0 z-10">
+            <div class="col-span-1 text-center">#</div>
+            <div class="col-span-5">英語</div>
+            <div class="col-span-5">日本語</div>
+            <div class="col-span-1 text-center">削除</div>
+          </div>
+          <div id="stagingList" class="divide-y divide-zinc-100 text-xs"></div>
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <button onclick="commitStagedRows()" class="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-medium transition shadow-xs active:scale-[0.99]">
+            この内容で単語帳に登録
+          </button>
+          <button onclick="discardStagedRows()" class="px-3.5 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-xs font-medium transition">
+            破棄
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 4. 管理 & バックアップ ==================== -->
+    <section id="paneManage" class="hidden flex-1 flex flex-col gap-3.5">
+      <!-- APIキー設定（直接通信用・Netlifyサーバーレス環境では省略可能） -->
+      <div class="bg-white border border-zinc-200/90 rounded-2xl p-4 shadow-xs flex flex-col gap-2.5">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-semibold text-zinc-900">Gemini API 設定</h3>
+          <span id="apiStatusBadge" class="text-[10px] text-zinc-400 font-medium">未設定</span>
+        </div>
+        <p class="text-[11px] text-zinc-500">
+          Netlify等のサーバー環境変数を設定している場合は入力不要です。直接通信時はGoogle AI StudioのAPIキーを入力してください。
+        </p>
+        <div class="flex gap-2">
+          <input type="password" id="apiKeyInput" placeholder="AQ.Ab... または AIzaSy..." class="flex-1 px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:outline-none focus:border-zinc-900">
+          <button onclick="saveApiKey()" class="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-medium transition">
+            保存
+          </button>
+        </div>
+      </div>
+
+      <!-- データバックアップ・復元 -->
+      <div class="bg-white border border-zinc-200/90 rounded-2xl p-4 shadow-xs flex flex-col gap-2.5">
+        <h3 class="text-xs font-semibold text-zinc-900">バックアップと復元</h3>
+        <p class="text-[11px] text-zinc-500">学習データは端末内に自動保存されています。機種変更時や予備のバックアップ用に出力できます。</p>
+
+        <div class="grid grid-cols-2 gap-2 pt-0.5">
+          <button onclick="exportDataJson()" class="py-2 px-3 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-medium transition shadow-xs text-center">
+            JSONで保存
+          </button>
+          <button onclick="exportDataCsv()" class="py-2 px-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl text-xs font-medium transition border border-zinc-200 text-center">
+            CSVで保存
+          </button>
+        </div>
+
+        <label class="w-full py-2 px-3 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-xl text-xs font-medium text-zinc-700 transition flex items-center justify-center gap-1.5 cursor-pointer">
+          <span>ファイルから復元 (JSON / CSV)</span>
+          <input type="file" id="importInput" accept=".json,.csv,text/csv,application/json" class="hidden" onchange="importDataFile(this.files[0])">
+        </label>
+      </div>
+
+      <!-- 登録済み単語一覧 -->
+      <div class="bg-white border border-zinc-200/90 rounded-2xl p-4 shadow-xs flex flex-col gap-2.5">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-semibold text-zinc-900">登録済み単語 (<span id="manageCount">0</span>)</h3>
+          <button onclick="clearAllWords()" class="text-[11px] text-rose-600 hover:text-rose-700 transition">
+            すべて削除
+          </button>
+        </div>
+        <div id="manageWordList" class="flex flex-col gap-1 max-h-72 overflow-y-auto pr-0.5 text-xs"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== 使い方ガイドモーダル ==================== -->
+  <div id="guideModal" class="hidden fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-zinc-200 flex flex-col gap-4 max-h-[88vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-zinc-100 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-6 h-6 rounded-md bg-zinc-900 text-white flex items-center justify-center font-bold text-xs">?</span>
+          <h3 class="text-sm font-semibold text-zinc-900">Smart Vocab の使い方</h3>
+        </div>
+        <button onclick="closeGuideModal()" class="w-7 h-7 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 flex items-center justify-center transition">
+          ✕
+        </button>
+      </div>
+
+      <div class="flex flex-col gap-4 text-xs text-zinc-600 leading-relaxed">
+        <div class="flex gap-3">
+          <span class="w-5 h-5 rounded-full bg-zinc-100 text-zinc-800 font-semibold flex items-center justify-center shrink-0 text-[10px]">1</span>
+          <div>
+            <h4 class="font-semibold text-zinc-900 mb-0.5">写真から単語をまとめて読み取る</h4>
+            <p class="text-zinc-500">「写真読取」タブで、手元の参考書の写真をアルバムから複数選択します。AIが英単語と日本語訳を自動抽出します。</p>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <span class="w-5 h-5 rounded-full bg-zinc-100 text-zinc-800 font-semibold flex items-center justify-center shrink-0 text-[10px]">2</span>
+          <div>
+            <h4 class="font-semibold text-zinc-900 mb-0.5">確認・微調整して登録</h4>
+            <p class="text-zinc-500">抽出された単語一覧が表示されます。誤認識があれば手動で編集し、「この内容で登録」を押します。</p>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <span class="w-5 h-5 rounded-full bg-zinc-100 text-zinc-800 font-semibold flex items-center justify-center shrink-0 text-[10px]">3</span>
+          <div>
+            <h4 class="font-semibold text-zinc-900 mb-0.5">暗記カードでインプット</h4>
+            <p class="text-zinc-500">「覚える」タブでカードをタップすると裏返り、発音も聴けます。「英➔日」「日➔英」の切り替えが可能です。</p>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <span class="w-5 h-5 rounded-full bg-zinc-100 text-zinc-800 font-semibold flex items-center justify-center shrink-0 text-[10px]">4</span>
+          <div>
+            <h4 class="font-semibold text-zinc-900 mb-0.5">テストで定着度をチェック</h4>
+            <p class="text-zinc-500">「テスト」タブでは実際にキーボードで回答を入力します。正解を重ねると自動で「習得済み」になります。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-zinc-100 flex justify-end">
+        <button onclick="closeGuideModal()" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-medium transition shadow-xs">
+          閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-full text-xs font-medium shadow-md text-white transition-all pointer-events-none"></div>
+
+  <script>
+    // --- データ構造 & ストレージ ---
+    const DB_KEY = 'smart_vocab_app_data_v2';
+    const API_KEY_KEY = 'smart_vocab_gemini_api_key';
+
+    let vocabList = [];
+    let stagingRows = [];
+    let currentStudyIndex = 0;
+    let isFlipped = false;
+    let studyDirection = 'en-ja';
+
+    let testDirection = 'en-ja';
+    let currentTestItem = null;
+
+    window.onload = function() {
+      loadVocabData();
+      checkApiKeyDisplay();
+      updateDashboard();
+      initStudy();
+      initTest(false);
+      setupInputScroll();
+    };
+
+    function setupInputScroll() {
+      const input = document.getElementById('testInput');
+      if (!input) return;
+      input.addEventListener('focus', () => {
+        setTimeout(() => {
+          const card = document.getElementById('testQuestionBox');
+          if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 260);
+      });
+    }
+
+    function loadVocabData() {
+      try {
+        const raw = localStorage.getItem(DB_KEY);
+        vocabList = raw ? JSON.parse(raw) : [];
+      } catch {
+        vocabList = [];
+      }
+    }
+
+    function saveVocabData() {
+      localStorage.setItem(DB_KEY, JSON.stringify(vocabList));
+      updateDashboard();
+      renderManageList();
+    }
+
+    function updateDashboard() {
+      const total = vocabList.length;
+      const mastered = vocabList.filter(v => v.status === 'mastered').length;
+      const learning = vocabList.filter(v => v.status === 'learning').length;
+      const unlearned = vocabList.filter(v => v.status === 'unlearned').length;
+
+      document.getElementById('headerCountBadge').textContent = `${total} 語`;
+      document.getElementById('manageCount').textContent = total;
+
+      document.getElementById('dashMasteredCount').textContent = mastered;
+      document.getElementById('dashLearningCount').textContent = learning;
+      document.getElementById('dashUnlearnedCount').textContent = unlearned;
+
+      const masteredPct = total > 0 ? Math.round((mastered / total) * 100) : 0;
+      const learningPct = total > 0 ? Math.round((learning / total) * 100) : 0;
+
+      document.getElementById('dashPercent').textContent = `${masteredPct}%`;
+      document.getElementById('barMastered').style.width = `${masteredPct}%`;
+      document.getElementById('barLearning').style.width = `${learningPct}%`;
+    }
+
+    // --- タブ切り替え ---
+    function switchTab(tab) {
+      const panes = { study: 'paneStudy', test: 'paneTest', scan: 'paneScan', manage: 'paneManage' };
+      const navs = { study: 'navStudy', test: 'navTest', scan: 'navScan', manage: 'navManage' };
+
+      Object.keys(panes).forEach(k => {
+        const p = document.getElementById(panes[k]);
+        const n = document.getElementById(navs[k]);
+        if (k === tab) {
+          p.classList.remove('hidden');
+          n.className = "py-1.5 rounded-lg bg-white text-zinc-900 shadow-xs transition-all text-center";
+        } else {
+          p.classList.add('hidden');
+          n.className = "py-1.5 rounded-lg hover:text-zinc-900 transition-all text-center";
+        }
+      });
+
+      if (tab === 'study') initStudy();
+      if (tab === 'test') initTest(false);
+      if (tab === 'manage') renderManageList();
+    }
+
+    // --- モーダル & 音声 ---
+    function openGuideModal() {
+      document.getElementById('guideModal').classList.remove('hidden');
+    }
+    function closeGuideModal() {
+      document.getElementById('guideModal').classList.add('hidden');
+    }
+
+    function playCurrentAudio() {
+      if (!vocabList.length || !currentStudyIndex >= vocabList.length) return;
+      const item = vocabList[currentStudyIndex];
+      if (!item || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const ut = new SpeechSynthesisUtterance(item.en);
+      ut.lang = 'en-US';
+      ut.rate = 0.9;
+      window.speechSynthesis.speak(ut);
+    }
+
+    // --- 1. 覚える（フラッシュカード） ---
+    function setStudyDirection(dir) {
+      studyDirection = dir;
+      const bEnJa = document.getElementById('studyDirEnJp');
+      const bJaEn = document.getElementById('studyDirJpEn');
+      if (dir === 'en-ja') {
+        bEnJa.className = "px-2.5 py-1 rounded-md bg-white text-zinc-900 shadow-xs transition";
+        bJaEn.className = "px-2.5 py-1 rounded-md text-zinc-500 hover:text-zinc-900 transition";
+      } else {
+        bJaEn.className = "px-2.5 py-1 rounded-md bg-white text-zinc-900 shadow-xs transition";
+        bEnJa.className = "px-2.5 py-1 rounded-md text-zinc-500 hover:text-zinc-900 transition";
+      }
+      initStudy();
+    }
+
+    function initStudy() {
+      const empty = document.getElementById('studyEmptyState');
+      const cardWrap = document.getElementById('studyCardContainer');
+      const actions = document.getElementById('studyActionBar');
+
+      if (!vocabList.length) {
+        empty.classList.remove('hidden');
+        cardWrap.classList.add('hidden');
+        actions.classList.add('hidden');
+        document.getElementById('studyCounter').textContent = '0 / 0';
+        return;
+      }
+      empty.classList.add('hidden');
+      cardWrap.classList.remove('hidden');
+      actions.classList.remove('hidden');
+
+      if (currentStudyIndex >= vocabList.length) currentStudyIndex = 0;
+      const item = vocabList[currentStudyIndex];
+      document.getElementById('studyCounter').textContent = `${currentStudyIndex + 1} / ${vocabList.length}`;
+
+      isFlipped = false;
+      const cardInner = document.getElementById('studyCardInner');
+      cardInner.classList.remove('flipped');
+
+      const frontText = document.getElementById('studyCardMainText');
+      const backText = document.getElementById('studyCardSubText');
+      const dirLabel = document.getElementById('studyDirectionLabel');
+      backText.classList.add('hidden');
+
+      if (studyDirection === 'en-ja') {
+        dirLabel.textContent = "ENGLISH";
+        frontText.className = "fluid-en font-semibold text-zinc-900 tracking-tight max-w-full";
+        frontText.textContent = item.en;
+        backText.className = "fluid-jp font-semibold text-zinc-600 mt-3 hidden max-w-full";
+        backText.textContent = item.jp;
+      } else {
+        dirLabel.textContent = "日本語";
+        frontText.className = "fluid-jp font-semibold text-zinc-900 tracking-tight max-w-full";
+        frontText.textContent = item.jp;
+        backText.className = "fluid-en font-semibold text-zinc-600 mt-3 hidden max-w-full";
+        backText.textContent = item.en;
+      }
+
+      const badge = document.getElementById('studyCardStatusBadge');
+      if (item.status === 'mastered') {
+        badge.textContent = '習得済';
+        badge.className = 'px-2 py-0.5 rounded-md font-medium text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200/60';
+      } else if (item.status === 'learning') {
+        badge.textContent = '学習中';
+        badge.className = 'px-2 py-0.5 rounded-md font-medium text-[10px] bg-amber-50 text-amber-700 border border-amber-200/60';
+      } else {
+        badge.textContent = '未着手';
+        badge.className = 'px-2 py-0.5 rounded-md font-medium text-[10px] bg-zinc-100 text-zinc-600';
+      }
+    }
+
+    function toggleStudyCardFlip() {
+      if (!vocabList.length) return;
+      isFlipped = !isFlipped;
+      document.getElementById('studyCardSubText').classList.toggle('hidden', !isFlipped);
+    }
+
+    function stepStudyCard(delta) {
+      if (!vocabList.length) return;
+      currentStudyIndex = (currentStudyIndex + delta + vocabList.length) % vocabList.length;
+      initStudy();
+    }
+
+    async function markStudyCard(status) {
+      if (!vocabList.length) return;
+      vocabList[currentStudyIndex].status = status;
+      saveVocabData();
+      showToast(status === 'mastered' ? "習得済みに更新しました" : "学習中に更新しました", "info");
+      stepStudyCard(1);
+    }
+
+    // --- 2. テストモード ---
+    function setTestDirection(dir) {
+      testDirection = dir;
+      const bEnJa = document.getElementById('testDirEnJa');
+      const bJaEn = document.getElementById('testDirJaEn');
+      if (dir === 'en-ja') {
+        bEnJa.className = "px-3 py-1 rounded-md bg-white text-zinc-900 shadow-xs transition";
+        bJaEn.className = "px-3 py-1 rounded-md text-zinc-500 hover:text-zinc-900 transition";
+      } else {
+        bJaEn.className = "px-3 py-1 rounded-md bg-white text-zinc-900 shadow-xs transition";
+        bEnJa.className = "px-3 py-1 rounded-md text-zinc-500 hover:text-zinc-900 transition";
+      }
+      initTest(false);
+    }
+
+    function initTest(focus = false) {
+      const empty = document.getElementById('testEmptyState');
+      const box = document.getElementById('testQuestionBox');
+      const form = document.getElementById('testForm');
+      const fb = document.getElementById('testFeedback');
+
+      fb.classList.add('hidden');
+      const input = document.getElementById('testInput');
+      input.value = '';
+      input.disabled = false;
+      document.getElementById('testSubmitBtn').disabled = false;
+
+      if (!vocabList.length) {
+        empty.classList.remove('hidden');
+        box.classList.add('hidden');
+        form.classList.add('hidden');
+        currentTestItem = null;
+        return;
+      }
+      empty.classList.add('hidden');
+      box.classList.remove('hidden');
+      form.classList.remove('hidden');
+
+      const idx = Math.floor(Math.random() * vocabList.length);
+      currentTestItem = vocabList[idx];
+
+      const promptLabel = document.getElementById('testDirectionPrompt');
+      const promptWord = document.getElementById('testPromptWord');
+      const hintBox = document.getElementById('testHintBox');
+      const statusBadge = document.getElementById('testStatusBadge');
+
+      statusBadge.textContent = currentTestItem.status === 'mastered' ? '習得済' : (currentTestItem.status === 'learning' ? '学習中' : '未着手');
+      statusBadge.className = currentTestItem.status === 'mastered'
+        ? 'px-2 py-0.5 rounded-md font-medium text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+        : (currentTestItem.status === 'learning' ? 'px-2 py-0.5 rounded-md font-medium text-[10px] bg-amber-50 text-amber-700 border border-amber-200/60' : 'px-2 py-0.5 rounded-md font-medium text-[10px] bg-zinc-100 text-zinc-600');
+
+      if (testDirection === 'en-ja') {
+        promptLabel.textContent = "日本語の意味を入力";
+        promptWord.textContent = currentTestItem.en;
+        hintBox.classList.add('hidden');
+        input.placeholder = "意味を入力...";
+      } else {
+        promptLabel.textContent = "英単語を入力";
+        promptWord.textContent = currentTestItem.jp;
+        const initial = currentTestItem.en.trim().charAt(0).toUpperCase();
+        document.getElementById('testHintChar').textContent = `[ ${initial}... ] (${currentTestItem.en.length}文字)`;
+        hintBox.classList.remove('hidden');
+        input.placeholder = `英単語を入力 (${initial}...)`;
+      }
+
+      if (focus && !('ontouchstart' in window)) input.focus();
+    }
+
+    async function handleTestSubmit(e) {
+      e.preventDefault();
+      if (!currentTestItem) return;
+
+      const input = document.getElementById('testInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const fb = document.getElementById('testFeedback');
+      const fbStatus = document.getElementById('testFeedbackStatus');
+      const fbDetail = document.getElementById('testFeedbackDetail');
+      const fbStats = document.getElementById('testFeedbackStats');
+
+      let isCorrect = false;
+
+      if (testDirection === 'en-ja') {
+        const cleanUser = text.replace(/[、,・\s]/g, '').toLowerCase();
+        const parts = currentTestItem.jp.split(/[,、・/\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+        isCorrect = parts.some(p => cleanUser.includes(p) || p.includes(cleanUser));
+      } else {
+        const cleanUser = text.toLowerCase().replace(/[^a-z0-9\-]/g, '');
+        const cleanTarget = currentTestItem.en.toLowerCase().trim().replace(/[^a-z0-9\-]/g, '');
+        isCorrect = cleanUser === cleanTarget;
+      }
+
+      if (isCorrect) {
+        fb.className = "p-3.5 rounded-xl border bg-emerald-50/70 border-emerald-200/80 text-emerald-950 text-center flex flex-col gap-1";
+        fbStatus.innerHTML = '<span class="text-emerald-700 font-semibold">正解</span>';
+        fbDetail.innerHTML = `<span class="font-medium text-emerald-900">${currentTestItem.en}</span> = ${currentTestItem.jp}`;
+        currentTestItem.correctCount = (currentTestItem.correctCount || 0) + 1;
+        currentTestItem.status = 'mastered';
+      } else {
+        fb.className = "p-3.5 rounded-xl border bg-rose-50/70 border-rose-200/80 text-rose-950 text-center flex flex-col gap-1";
+        fbStatus.innerHTML = '<span class="text-rose-700 font-semibold">不正解</span>';
+        fbDetail.innerHTML = `正解: <strong class="text-rose-900 font-semibold">${currentTestItem.en}</strong> = ${currentTestItem.jp}`;
+        currentTestItem.incorrectCount = (currentTestItem.incorrectCount || 0) + 1;
+        currentTestItem.status = 'learning';
+      }
+
+      saveVocabData();
+
+      const totalAttempts = (currentTestItem.correctCount || 0) + (currentTestItem.incorrectCount || 0);
+      const rate = Math.round(((currentTestItem.correctCount || 0) / totalAttempts) * 100);
+      fbStats.textContent = `${currentTestItem.correctCount}勝 ${currentTestItem.incorrectCount}敗 (${rate}%) · 状態: ${currentTestItem.status === 'mastered' ? '習得済' : '学習中'}`;
+
+      fb.classList.remove('hidden');
+      input.disabled = true;
+      document.getElementById('testSubmitBtn').disabled = true;
+    }
+
+    function nextTestQuestion() {
+      initTest(false);
+      const card = document.getElementById('testQuestionBox');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // --- 3. 画像リサイズ & OCR処理 ---
+    function downscaleImage(file, maxDimension = 1600) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > maxDimension || h > maxDimension) {
+              if (w > h) { h = Math.round((h * maxDimension) / w); w = maxDimension; }
+              else { w = Math.round((w * maxDimension) / h); h = maxDimension; }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+          };
+          img.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+          img.src = e.target.result;
+        };
+        reader.onerror = () => reject(new Error("ファイル読み込みエラー"));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handlePhotosSelected(fileList) {
+      if (!fileList || !fileList.length) return;
+      const validFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+      if (!validFiles.length) {
+        showToast("有効な画像ファイルを選択してください", "warning");
+        return;
+      }
+
+      const pBox = document.getElementById('scanProgressBox');
+      const pBar = document.getElementById('scanProgressBar');
+      const pStatus = document.getElementById('scanProgressStatus');
+      const pDetail = document.getElementById('scanProgressDetail');
+
+      pBox.classList.remove('hidden');
+      stagingRows = [];
+
+      for (let i = 0; i < validFiles.length; i++) {
+        pStatus.textContent = `写真 ${i + 1} / ${validFiles.length} 枚目を解析中...`;
+        pDetail.textContent = validFiles[i].name;
+        pBar.style.width = `${Math.round(((i + 0.3) / validFiles.length) * 100)}%`;
+
+        try {
+          const base64Data = await downscaleImage(validFiles[i]);
+          const pairs = await requestOCR(base64Data);
+
+          if (Array.isArray(pairs)) {
+            pairs.forEach(p => {
+              const en = String(p.english || '').trim();
+              const jp = String(p.japanese || '').trim();
+              if (en && jp) {
+                stagingRows.push({ tempId: Date.now() + Math.random(), en, jp });
+              }
+            });
+          }
+        } catch (err) {
+          console.error(err);
+          showToast(`写真(${validFiles[i].name})の解析に失敗しました: ${err.message}`, "warning");
+        }
+        pBar.style.width = `${Math.round(((i + 1) / validFiles.length) * 100)}%`;
+      }
+
+      setTimeout(() => pBox.classList.add('hidden'), 800);
+      document.getElementById('photoFileInput').value = '';
+
+      if (!stagingRows.length) {
+        showToast("単語を検出できませんでした。より鮮明な画像をお試しください。", "warning");
+        return;
+      }
+
+      renderStaging();
+      showToast(`${stagingRows.length}件の単語候補を抽出しました`, "success");
+    }
+
+    async function requestOCR(base64Image) {
+      // 1. Netlify Functions が存在する場合は優先呼出（サーバー側キー隠蔽）
+      try {
+        const netlifyRes = await fetch('/.netlify/functions/extract-words', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Image, mimeType: 'image/jpeg' })
+        });
+        if (netlifyRes.ok) {
+          return await netlifyRes.json();
+        }
+      } catch (_) {}
+
+      // 2. Google Gemini API（gemini-3.8-flash）への直接リクエスト
+      const prompt = `あなたは英語学習用の高精度OCRアシスタントです。
+画像内の単語集・問題集から「日本語の意味」と「英単語」の対応ペアを読み取り、JSON配列形式で抽出してください。
+番号や品詞記号は除外し、純粋なテキストのみを返してください。
+フォーマット例: [{"japanese":"〜を達成する","english":"achieve"}]`;
+
+      const localKey = localStorage.getItem(API_KEY_KEY) || '';
+      const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
+
+      const headers = { 'Content-Type': 'application/json' };
+      if (localKey) {
+        headers['x-goog-api-key'] = localKey.trim();
+      }
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json'
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}: APIキーを確認してください`);
+      }
+
+      const data = await res.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+      return JSON.parse(rawText);
+    }
+
+    function renderStaging() {
+      const box = document.getElementById('stagingBox');
+      const list = document.getElementById('stagingList');
+      const count = document.getElementById('stagingCount');
+
+      if (!stagingRows.length) {
+        box.classList.add('hidden');
+        return;
+      }
+      box.classList.remove('hidden');
+      count.textContent = stagingRows.length;
+
+      list.innerHTML = stagingRows.map((row, idx) => `
+        <div class="grid grid-cols-12 items-center px-3 py-1.5 gap-2 hover:bg-zinc-50 transition">
+          <div class="col-span-1 text-center text-[10px] text-zinc-400 font-medium">${idx + 1}</div>
+          <div class="col-span-5">
+            <input type="text" value="${escapeHtml(row.en)}" oninput="updateStagingRow(${row.tempId}, 'en', this.value)" class="w-full px-2 py-1 bg-zinc-50 border border-zinc-200 rounded text-xs text-zinc-900 font-medium focus:outline-none focus:bg-white focus:border-zinc-900" placeholder="英単語">
+          </div>
+          <div class="col-span-5">
+            <input type="text" value="${escapeHtml(row.jp)}" oninput="updateStagingRow(${row.tempId}, 'jp', this.value)" class="w-full px-2 py-1 bg-zinc-50 border border-zinc-200 rounded text-xs text-zinc-800 focus:outline-none focus:bg-white focus:border-zinc-900" placeholder="意味">
+          </div>
+          <div class="col-span-1 text-center">
+            <button onclick="removeStagingRow(${row.tempId})" class="text-zinc-400 hover:text-rose-600 transition" title="削除">✕</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function addEmptyStagingRow() {
+      stagingRows.push({ tempId: Date.now() + Math.random(), en: '', jp: '' });
+      renderStaging();
+    }
+    function updateStagingRow(tempId, key, val) {
+      const row = stagingRows.find(x => x.tempId === tempId);
+      if (row) row[key] = val;
+    }
+    function removeStagingRow(tempId) {
+      stagingRows = stagingRows.filter(x => x.tempId !== tempId);
+      renderStaging();
+    }
+    function discardStagedRows() {
+      stagingRows = [];
+      document.getElementById('stagingBox').classList.add('hidden');
+    }
+
+    function commitStagedRows() {
+      let added = 0;
+      stagingRows.forEach(row => {
+        const en = row.en.trim();
+        const jp = row.jp.trim();
+        if (en && jp) {
+          const exists = vocabList.some(v => v.en.toLowerCase() === en.toLowerCase());
+          if (!exists) {
+            vocabList.unshift({
+              id: Date.now() + Math.random(),
+              en,
+              jp,
+              status: 'unlearned',
+              correctCount: 0,
+              incorrectCount: 0
+            });
+            added++;
+          }
+        }
+      });
+
+      if (added > 0) {
+        saveVocabData();
+        showToast(`${added}件の単語を登録しました`, "success");
+        initStudy();
+        initTest(false);
+        switchTab('study');
+      } else {
+        showToast("すべて既存の単語と重複していたため追加されませんでした", "warning");
+      }
+      discardStagedRows();
+    }
+
+    // --- 4. 管理 & バックアップ ---
+    function checkApiKeyDisplay() {
+      const saved = localStorage.getItem(API_KEY_KEY);
+      const input = document.getElementById('apiKeyInput');
+      const badge = document.getElementById('apiStatusBadge');
+      if (saved) {
+        input.value = saved;
+        badge.textContent = '設定済み';
+        badge.className = 'text-[10px] text-emerald-600 font-medium';
+      } else {
+        badge.textContent = '未設定';
+        badge.className = 'text-[10px] text-zinc-400 font-medium';
+      }
+    }
+
+    function saveApiKey() {
+      const input = document.getElementById('apiKeyInput');
+      const val = input.value.trim();
+      if (val) {
+        localStorage.setItem(API_KEY_KEY, val);
+        showToast("APIキーを保存しました", "success");
+      } else {
+        localStorage.removeItem(API_KEY_KEY);
+        showToast("APIキーを解除しました", "info");
+      }
+      checkApiKeyDisplay();
+    }
+
+    function renderManageList() {
+      const box = document.getElementById('manageWordList');
+      if (!vocabList.length) {
+        box.innerHTML = '<div class="p-4 text-center text-xs text-zinc-400">登録された単語はありません</div>';
+        return;
+      }
+      box.innerHTML = vocabList.map((item, idx) => `
+        <div class="flex items-center justify-between p-2.5 bg-zinc-50/70 rounded-xl border border-zinc-100 hover:border-zinc-200 transition">
+          <div class="flex flex-col min-w-0 pr-2 flex-1">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="font-medium text-zinc-900">${escapeHtml(item.en)}</span>
+              <span class="text-[9px] font-medium px-1.5 py-0.2 rounded ${item.status === 'mastered' ? 'bg-emerald-50 text-emerald-700' : (item.status === 'learning' ? 'bg-amber-50 text-amber-700' : 'bg-zinc-100 text-zinc-500')}">${item.status === 'mastered' ? '習得済' : (item.status === 'learning' ? '学習中' : '未着手')}</span>
+            </div>
+            <span class="text-[11px] text-zinc-500 truncate mt-0.5">${escapeHtml(item.jp)}</span>
+          </div>
+          <button onclick="deleteSingleWord(${item.id})" class="text-zinc-400 hover:text-rose-600 p-1 rounded transition shrink-0" title="削除">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function deleteSingleWord(id) {
+      vocabList = vocabList.filter(v => v.id !== id);
+      saveVocabData();
+      initStudy();
+      initTest(false);
+      showToast("単語を削除しました", "info");
+    }
+
+    function clearAllWords() {
+      if (confirm("すべての登録単語を削除しますか？")) {
+        vocabList = [];
+        saveVocabData();
+        initStudy();
+        initTest(false);
+        showToast("全単語を削除しました", "info");
+      }
+    }
+
+    function exportDataJson() {
+      if (!vocabList.length) {
+        showToast("保存する単語がありません", "warning");
+        return;
+      }
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(vocabList, null, 2));
+      const a = document.createElement('a');
+      a.href = dataStr;
+      a.download = `smart_vocab_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      showToast("JSONファイルを保存しました", "success");
+    }
+
+    function exportDataCsv() {
+      if (!vocabList.length) {
+        showToast("保存する単語がありません", "warning");
+        return;
+      }
+      let csv = "\uFEFFEnglish,Japanese,Status\r\n";
+      vocabList.forEach(v => {
+        csv += `"${v.en.replace(/"/g, '""')}","${v.jp.replace(/"/g, '""')}","${v.status}"\r\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `smart_vocab_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      showToast("CSVファイルを保存しました", "success");
+    }
+
+    function importDataFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      const isJson = file.name.endsWith('.json') || file.type === "application/json";
+
+      reader.onload = (e) => {
+        try {
+          let imported = [];
+          if (isJson) {
+            imported = JSON.parse(e.target.result);
+          } else {
+            const lines = e.target.result.split(/\r?\n/);
+            lines.forEach((line, index) => {
+              if (index === 0 && line.toLowerCase().includes('english')) return;
+              const tokens = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+              if (tokens.length >= 2) {
+                const en = tokens[0].replace(/^"|"$/g, '').replace(/""/g, '"').trim();
+                const jp = tokens[1].replace(/^"|"$/g, '').replace(/""/g, '"').trim();
+                const status = tokens[2] ? tokens[2].replace(/^"|"$/g, '').trim() : 'unlearned';
+                if (en && jp) imported.push({ id: Date.now() + Math.random(), en, jp, status });
+              }
+            });
+          }
+
+          if (Array.isArray(imported) && imported.length) {
+            let count = 0;
+            imported.forEach(item => {
+              if (!vocabList.some(v => v.en.toLowerCase() === item.en.toLowerCase())) {
+                vocabList.unshift({
+                  id: Date.now() + Math.random(),
+                  en: item.en,
+                  jp: item.jp,
+                  status: item.status || 'unlearned',
+                  correctCount: 0,
+                  incorrectCount: 0
+                });
+                count++;
+              }
+            });
+            saveVocabData();
+            showToast(`${count}件の単語を復元しました`, "success");
+            initStudy();
+            initTest(false);
+          }
+        } catch (_) {
+          showToast("ファイルの復元に失敗しました", "warning");
+        }
+      };
+      reader.readAsText(file, "UTF-8");
+    }
+
+    function showToast(msg, type = "info") {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      if (type === "success") t.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-full text-xs font-medium shadow-md bg-zinc-900 text-white transition-all";
+      else if (type === "warning") t.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-full text-xs font-medium shadow-md bg-amber-700 text-white transition-all";
+      else t.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-full text-xs font-medium shadow-md bg-zinc-800 text-white transition-all";
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 2500);
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>
